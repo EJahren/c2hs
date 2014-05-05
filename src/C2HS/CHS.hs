@@ -822,31 +822,33 @@ parseFrags tokens  = do
                                                return $ CHSLine pos : frags
     parseFrags0 (CHSTokC       pos s:toks) = parseC       pos s      toks
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokImport  pos  :toks) = parseImport  hkpos pos        toks
+                 CHSTokImport  pos  :toks) = parseImport  hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokContext pos  :toks) = parseContext hkpos pos        toks
+                 CHSTokContext pos  :toks) = parseContext hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokType    pos  :toks) = parseType    hkpos pos        toks
+                 CHSTokType    pos  :toks) = parseType    hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokSizeof  pos  :toks) = parseSizeof  hkpos pos        toks
+                 CHSTokSizeof  pos  :toks) = parseSizeof  hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokAlignof pos  :toks) = parseAlignof hkpos pos        toks
+                 CHSTokAlignof pos  :toks) = parseAlignof hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokEnum    pos  :toks) = parseEnum    hkpos pos        toks
+                 CHSTokEnum    pos  :toks) = parseEnum    hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokCall    pos  :toks) = parseCall    hkpos pos        toks
+                 CHSTokCall    pos  :toks) = parseCall    hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokFun     pos  :toks) = parseFun     hkpos pos        toks
+                 CHSTokFun     pos  :toks) = parseFun     hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokGet     pos  :toks) = parseField   hkpos pos CHSGet toks
+                 CHSTokGet     pos  :toks) = parseField   hkpos pos CHSGet (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokSet     pos  :toks) = parseField   hkpos pos CHSSet toks
+                 CHSTokSet     pos  :toks) = parseField   hkpos pos CHSSet (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokOffsetof pos :toks) = parseOffsetof hkpos pos       toks
+                 CHSTokOffsetof pos :toks) = parseOffsetof hkpos pos       (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokClass   pos  :toks) = parseClass   hkpos pos        toks
+                 CHSTokClass   pos  :toks) = parseClass   hkpos pos        (skipUntilEndHook toks)
     parseFrags0 (CHSTokHook hkpos:
-                 CHSTokPointer pos  :toks) = parsePointer hkpos pos        toks
+                 CHSTokPointer pos  :toks) = parsePointer hkpos pos        (skipUntilEndHook toks)
+    parseFrags0 (CHSTokHook hkpos:
+                 CHSTokComment{}    :toks) = parseFrags0 (CHSTokHook hkpos:toks)
     parseFrags0 (CHSTokHook hkpos   :toks) = syntaxError toks
     parseFrags0 toks                       = syntaxError toks
     --
@@ -856,6 +858,13 @@ parseFrags tokens  = do
     contFrags toks@(CHSTokHaskell _ _:_   ) = parseFrags toks
     contFrags toks@(CHSTokCtrl    _ _:_   ) = parseFrags toks
     contFrags      (_                :toks) = contFrags  toks
+    --
+    -- skip comment tokens until CHSTokEndHook
+    --
+    skipUntilEndHook [] = []
+    skipUntilEndHook tok@(CHSTokEndHook{} :_) = tok
+    skipUntilEndHook (CHSTokComment{}:toks) = skipUntilEndHook toks
+    skipUntilEndHook (x:toks) = x : skipUntilEndHook toks
 
 parseC :: Position -> String -> [CHSToken] -> CST s [CHSFrag]
 parseC pos s toks =
@@ -1363,3 +1372,4 @@ errorCHIVersion ide chiVersion myVersion  = do
      "The file `" ++ ide ++ ".chi' is version "
      ++ chiVersion ++ ", but mine is " ++ myVersion ++ "."]
   raiseSyntaxError
+
