@@ -498,7 +498,7 @@ haskell  = (    anyButSpecial`star` epsilon
             >|< specialButQuotes
             >|< char '"'  +> inhstr`star` char '"'
             >|< string "'\"'"                           -- special case of "
-            >|< string "--" +> anyButNL`star` epsilon   -- comment
+            >|< haskellComment
            )
            `lexaction` copyVerbatim
            >||< char '"'                                -- this is a bad kludge
@@ -509,7 +509,6 @@ haskell  = (    anyButSpecial`star` epsilon
            where
              anyButSpecial    = alt (inlineSet \\ specialSet)
              specialButQuotes = alt (specialSet \\ ['"'])
-             anyButNL         = alt (anySet \\ ['\n'])
              inhstr           = instr >|< char '\\' >|< string "\\\"" >|< gap
              gap              = char '\\' +> alt (' ':ctrlSet)`plus` char '\\'
 
@@ -609,7 +608,7 @@ hook  = string "{#"
 --
 startmarker :: CHSLexer
 startmarker = char '\000' `lexmeta`
-              \lexeme pos s -> (Nothing, incPos pos 1, s, Just chslexer)
+              \_ pos s -> (Nothing, incPos pos 1, s, Just chslexer)
 
 -- | pre-processor directives and `#c'
 --
@@ -667,14 +666,18 @@ bhLexer  =      identOrKW
            >||< hsquot
            >||< whitespace
            >||< endOfHook
-           >||< string "--" +> anyButNL`star` char '\n'   -- comment
+           >||< haskellComment
                 `lexmeta` \_ pos s -> (Nothing, retPos pos, s, Nothing)
            where
-             anyButNL  = alt (anySet \\ ['\n'])
              endOfHook = string "#}"
                          `lexmeta`
                           \_ pos s -> (Just $ Right (CHSTokEndHook pos),
                                        incPos pos 2, s, Just chslexer)
+
+haskellComment :: Regexp s t
+haskellComment = string "--" +> anyButNL `star` epsilon
+   where
+     anyButNL  = alt (anySet \\ ['\n'])
 
 -- | the inline-C lexer
 --
