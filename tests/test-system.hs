@@ -19,6 +19,7 @@ tests =
   [ testGroup "System"
     [ testCase "Calls"   test_calls
     , testCase "Cpp"     test_cpp
+    , testCase "Comments"     test_comments
     , testCase "Enums"   test_enums
     , testCase "Marsh"   test_marsh
     , testCase "Pointer" test_pointer
@@ -48,6 +49,11 @@ test_calls = run_test_exit_code "tests/system/calls"
              [("c2hs", ["calls.h", "Calls.chs"]),
               ("ghc", ["-c", "Calls.hs"])]
 
+test_comments :: Assertion
+test_comments = run_test_exit_code "tests/system/comments"
+             [("c2hs", ["comments.h", "Comments.chs"]),
+              ("ghc", ["-c", "Comments.hs"])]
+
 test_cpp :: Assertion
 test_cpp = run_test_exit_code "tests/system/cpp"
            [("c2hs", ["Cpp.chs"]),
@@ -60,6 +66,7 @@ test_enums = run_test_expect "tests/system/enums"
               ("ghc", ["-o", "enums", "enums_c.o", "Enums.hs"])]
              "./enums"
              ["Did it!"]
+
 
 test_marsh :: Assertion
 test_marsh = run_test_expect "tests/system/marsh"
