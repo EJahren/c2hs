@@ -237,6 +237,7 @@ data CHSToken = CHSTokArrow   Position          -- `->'
               | CHSTokUpper   Position          -- `upcaseFirstLetter'
               | CHSTokWith    Position          -- `with'
               | CHSTokString  Position String   -- string
+              | CHSTokComment  Position String   -- haskell comment
               | CHSTokHSVerb  Position String   -- verbatim Haskell (`...')
               | CHSTokHSQuot  Position String   -- quoted Haskell ('...')
               | CHSTokIdent   Position Ident    -- identifier
@@ -260,6 +261,7 @@ instance Pos CHSToken where
   posOf (CHSTokRBrace  pos  ) = pos
   posOf (CHSTokLParen  pos  ) = pos
   posOf (CHSTokRParen  pos  ) = pos
+  posOf (CHSTokHook    pos  ) = pos
   posOf (CHSTokEndHook pos  ) = pos
   posOf (CHSTokAdd     pos  ) = pos
   posOf (CHSTokAs      pos  ) = pos
@@ -292,6 +294,7 @@ instance Pos CHSToken where
   posOf (CHSTokUpper   pos  ) = pos
   posOf (CHSTokWith    pos  ) = pos
   posOf (CHSTokString  pos _) = pos
+  posOf (CHSTokComment pos _) = pos
   posOf (CHSTokHSVerb  pos _) = pos
   posOf (CHSTokHSQuot  pos _) = pos
   posOf (CHSTokIdent   pos _) = pos
@@ -347,6 +350,7 @@ instance Eq CHSToken where
   (CHSTokUpper    _  ) == (CHSTokUpper    _  ) = True
   (CHSTokWith     _  ) == (CHSTokWith     _  ) = True
   (CHSTokString   _ _) == (CHSTokString   _ _) = True
+  (CHSTokComment  _ _) == (CHSTokComment  _ _) = True
   (CHSTokHSVerb   _ _) == (CHSTokHSVerb   _ _) = True
   (CHSTokHSQuot   _ _) == (CHSTokHSQuot   _ _) = True
   (CHSTokIdent    _ _) == (CHSTokIdent    _ _) = True
@@ -371,6 +375,7 @@ instance Show CHSToken where
   showsPrec _ (CHSTokRBrace  _  ) = showString "}"
   showsPrec _ (CHSTokLParen  _  ) = showString "("
   showsPrec _ (CHSTokRParen  _  ) = showString ")"
+  showsPrec _ (CHSTokHook    _  ) = showString "{#"
   showsPrec _ (CHSTokEndHook _  ) = showString "#}"
   showsPrec _ (CHSTokAdd     _  ) = showString "add"
   showsPrec _ (CHSTokAs      _  ) = showString "as"
@@ -403,6 +408,7 @@ instance Show CHSToken where
   showsPrec _ (CHSTokUpper   _  ) = showString "upcaseFirstLetter"
   showsPrec _ (CHSTokWith    _  ) = showString "with"
   showsPrec _ (CHSTokString  _ s) = showString ("\"" ++ s ++ "\"")
+  showsPrec _ (CHSTokComment _ s) = showString ("--" ++ s)
   showsPrec _ (CHSTokHSVerb  _ s) = showString ("`" ++ s ++ "'")
   showsPrec _ (CHSTokHSQuot  _ s) = showString ("'" ++ s ++ "'")
   showsPrec _ (CHSTokIdent   _ i) = (showString . identToString) i
@@ -667,7 +673,7 @@ bhLexer  =      identOrKW
            >||< whitespace
            >||< endOfHook
            >||< haskellComment
-                `lexmeta` \_ pos s -> (Nothing, retPos pos, s, Nothing)
+                `lexmeta` \t pos s -> ((Just (Right (CHSTokComment pos (drop 2 t)))), retPos pos, s, Nothing)
            where
              endOfHook = string "#}"
                          `lexmeta`
