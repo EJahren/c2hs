@@ -43,6 +43,10 @@ run_test_expect dir cmds expcmd expected = shelly $ chdir dir $ do
   res <- absPath expcmd >>= cmd
   liftIO $ assertBool "" (T.lines res == expected)
 
+run_test_expect' dir cmds (expcmd,ps) expected = shelly $ chdir dir $ do
+  forM_ cmds $ \(c, as) -> run c as
+  res <- run expcmd ps
+  liftIO $ assertBool "" (T.lines res == expected)
 
 test_calls :: Assertion
 test_calls = run_test_exit_code "tests/system/calls"
@@ -50,9 +54,11 @@ test_calls = run_test_exit_code "tests/system/calls"
               ("ghc", ["-c", "Calls.hs"])]
 
 test_comments :: Assertion
-test_comments = run_test_exit_code "tests/system/comments"
+test_comments = run_test_expect' "tests/system/comments"
              [("c2hs", ["comments.h", "Comments.chs"]),
-              ("ghc", ["-c", "Comments.hs"])]
+              ("haddock", ["--hoogle", "Comments.hs"])]
+             ("grep",["Red","main.txt"])
+             ["-- | Red","Red :: Colour"]
 
 test_cpp :: Assertion
 test_cpp = run_test_exit_code "tests/system/cpp"

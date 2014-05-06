@@ -17,4 +17,4 @@ int foobar (tString,int,int*,float);
 #define THIS 1
 #define THAT 2
 
-#endif /* !_ENUMS_H */
+#endif /* !_COMMENTS_H */

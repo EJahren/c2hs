@@ -17,7 +17,7 @@ peekIntConv = liftM fromIntegral . peek
   as -- alias keyword
   Colour -- alias name
   { -- start namings
-  upcaseFirstLetter -- a naming
+  upcaseFirstLetter -- ^ a naming
   } --end namings
 #}
 
@@ -28,26 +28,26 @@ peekIntConv = liftM fromIntegral . peek
   as -- alias keyword
   barFun -- alias name
   { -- start of arguments
-  `Int' -- int argument
+  `Int' -- ^ int argument
   } -- end of arguments
    -> -- output type keyword
-   `Float' -- output
+   `Float' -- ^ Float output
 #}
 
 {# -- start of fun hook
   fun -- fun hook specifier
   foobar -- c name
   { -- start of arguments
-  `String'& -- first argument
+  `String'& -- ^ first argument
    , -- first comma
    alloca- -- second argument in-marshaller
-   `Int' -- second argument
+   `Int' -- ^ second argument
    peekIntConv* -- second argument out-marshaller
    , -- second comma
-   `Float' -- third argument
+   `Float' -- ^ third argument
   } -- end of arguments
   -> -- output type keyword
-  `Int' --output type
+  `Int' -- ^ output type
 #}
 
 main :: IO ()
