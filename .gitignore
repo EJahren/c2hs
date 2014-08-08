@@ -1,5 +1,6 @@
 *.chi
 *.chs.h
+/dist/*
 *.hi
 /issues/*
 *.o
@@ -76,3 +77,9 @@
 /tests/bugs/issue-79/Issue79.hs
 /tests/bugs/issue-80/Issue80
 /tests/bugs/issue-80/Issue80.hs
+/tests/bugs/issue-51/Issue51_GNU
+/tests/bugs/issue-51/Issue51_GNU.hs
+/tests/bugs/issue-51/Issue51_nonGNU
+/tests/bugs/issue-51/Issue51_nonGNU.hs
+/.cabal-sandbox/*
+/cabal.sandbox.config

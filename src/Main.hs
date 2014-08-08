@@ -124,7 +124,7 @@ import Data.Version (showVersion)
 import System.Console.GetOpt
                   (ArgOrder(..), OptDescr(..), ArgDescr(..), usageInfo, getOpt)
 import qualified System.FilePath as FilePath
-                  (takeExtension, dropExtension, takeBaseName)
+                  (takeDirectory, takeExtension, dropExtension)
 import System.FilePath ((<.>), (</>), splitSearchPath)
 import System.IO (stderr, openFile, IOMode(..))
 import System.IO.Error (ioeGetErrorString, ioeGetFileName)
@@ -136,7 +136,7 @@ import C2HS.State  (CST, runC2HS, fatal, fatalsHandledBy,
                    traceSet, setSwitch, getSwitch, putTraceStr)
 import qualified System.CIO as CIO
 import C2HS.C     (hsuffix, isuffix, loadAttrC)
-import C2HS.CHS   (loadCHS, dumpCHS, hssuffix, chssuffix, dumpCHI)
+import C2HS.CHS   (loadCHS, dumpCHS, hssuffix, chssuffix, dumpCHI, hasNonGNU)
 import C2HS.Gen.Header  (genHeader)
 import C2HS.Gen.Bind      (expandHooks)
 import C2HS.Version    (versnum, version, copyright, disclaimer)
@@ -178,8 +178,6 @@ errTrailer = "Try the option `--help' on its own for more information.\n"
 --
 data Flag = CPPOpts  String     -- ^ additional options for C preprocessor
           | CPP      String     -- ^ program name of C preprocessor
-          | NoGNU               -- ^ suppress GNU preprocessor symbols
-          | NoBlocks            -- ^ suppress MacOS __BLOCKS__ preproc. symbol
           | Dump     DumpType   -- ^ dump internal information
           | Help                -- ^ print brief usage information
           | Keep                -- ^ keep the .i file
@@ -211,14 +209,6 @@ options  = [
          ["cpp"]
          (ReqArg CPP "CPP")
          "use executable CPP to invoke C preprocessor",
-  Option ['n']
-         ["no-gnu"]
-         (NoArg NoGNU)
-         "suppress GNU preprocessor symbols",
-  Option ['b']
-         ["no-blocks"]
-         (NoArg NoBlocks)
-         "suppress MacOS __BLOCKS__ preprocessor symbol",
   Option ['d']
          ["dump"]
          (ReqArg dumpArg "TYPE")
@@ -279,7 +269,7 @@ compile  =
   do
     setup
     cmdLine <- CIO.getArgs
-    case getOpt RequireOrder options cmdLine of
+    case getOpt Permute options cmdLine of
       (opts, []  , [])
         | noCompOpts opts -> doExecute opts Nothing
       (opts, args, [])    -> case parseArgs args of
@@ -330,7 +320,8 @@ compile  =
             fnMsg = case ioeGetFileName err of
                        Nothing -> ""
                        Just s  -> " (file: `" ++ s ++ "')"
-        CIO.hPutStrLn stderr (msg ++ fnMsg)
+        name <- CIO.getProgName
+        CIO.hPutStrLn stderr $ concat [name, ": ", msg, fnMsg]
         CIO.exitWith $ CIO.ExitFailure 1
 
 -- | set up base configuration
@@ -370,19 +361,11 @@ execute opts args | Help `elem` opts = help
         let bndFileWithoutSuffix  = FilePath.dropExtension bndFile
         computeOutputName bndFileWithoutSuffix
         process headerFiles bndFileWithoutSuffix
-          `fatalsHandledBy` die
       Nothing ->
         computeOutputName "."   -- we need the output name for library copying
     copyLibrary
-      `fatalsHandledBy` die
   where
     atMostOne = (foldl (\_ x -> [x]) [])
-    --
-    die ioerr =
-      do
-        name <- CIO.getProgName
-        CIO.putStr $ name ++ ": " ++ ioeGetErrorString ioerr ++ "\n"
-        CIO.exitWith $ CIO.ExitFailure 1
 
 -- | emit help message
 --
@@ -403,8 +386,6 @@ help =
 processOpt :: Flag -> CST s ()
 processOpt (CPPOpts  cppopt ) = addCPPOpts  [cppopt]
 processOpt (CPP      cpp    ) = setCPP      cpp
-processOpt (NoGNU           ) = setNoGNU
-processOpt (NoBlocks        ) = setNoBlocks
 processOpt (Dump     dt     ) = setDump     dt
 processOpt (Keep            ) = setKeep
 processOpt (Library         ) = setLibrary
@@ -464,16 +445,6 @@ addCPPOpts opts  = setSwitch $ \sb -> sb {cppOptsSB = cppOptsSB sb ++ opts}
 --
 setCPP       :: FilePath -> CST s ()
 setCPP fname  = setSwitch $ \sb -> sb {cppSB = fname}
-
--- | set flag to suppress GNU preprocessor symbols
---
-setNoGNU :: CST s ()
-setNoGNU  = setSwitch $ \sb -> sb {noGnuSB = True}
-
--- | set flag to suppress MacOS __BLOCKS__ preprocessor symbols
---
-setNoBlocks :: CST s ()
-setNoBlocks = setSwitch $ \sb -> sb {noBlocksSB = True}
 
 -- set the given dump option
 --
@@ -551,7 +522,21 @@ process headerFiles bndFile  =
     --
     (chsMod , warnmsgs) <- loadCHS bndFile
     CIO.putStr warnmsgs
-    traceCHSDump chsMod
+    --
+    -- get output directory and create it if it's missing
+    --
+    outFName <- getSwitch outputSB
+    outDir   <- getSwitch outDirSB
+    let outFPath = outDir </> outFName
+    CIO.createDirectoryIfMissing True $ FilePath.takeDirectory outFPath
+    --
+    -- dump the binding file when demanded
+    --
+    flag <- traceSet dumpCHSSW
+    when flag $ do
+      let chsName = outFPath <.> "dump"
+      CIO.putStrLn $ "...dumping CHS to `" ++ chsName ++ "'..."
+      dumpCHS chsName chsMod False
     --
     -- extract CPP and inline-C embedded in the .chs file (all CPP and
     -- inline-C fragments are removed from the .chs tree and conditionals are
@@ -563,11 +548,9 @@ process headerFiles bndFile  =
     -- create new header file, make it #include `headerFile', and emit
     -- CPP and inline-C of .chs file into the new header
     --
-    outFName <- getSwitch outputSB
-    outDir   <- getSwitch outDirSB
     let newHeader     = outFName <.> chssuffix <.> hsuffix
         newHeaderFile = outDir </> newHeader
-        preprocFile   = FilePath.takeBaseName outFName <.> isuffix
+        preprocFile   = outFPath <.> isuffix
     CIO.writeFile newHeaderFile $ concat $
       [ "#include \"" ++ headerFile ++ "\"\n"
       | headerFile <- headerFiles ]
@@ -586,14 +569,17 @@ process headerFiles bndFile  =
     --
     cpp      <- getSwitch cppSB
     cppOpts  <- getSwitch cppOptsSB
-    noGnu    <- getSwitch noGnuSB
-    noBlocks <- getSwitch noBlocksSB
-    let noGnuOpts =
-          if noGnu
-          then ["-U__GNUC__", "-U__GNUC_MINOR__", "-U__GNUC_PATCHLEVEL__"]
+    let nonGNUOpts =
+          if hasNonGNU chsMod
+          then [ "-U__GNUC__"
+               , "-U__GNUC_MINOR__"
+               , "-U__GNUC_PATCHLEVEL__"
+               , "-D__AVAILIBILITY__"
+               , "-D__OSX_AVAILABLE_STARTING(a,b)"
+               , "-D__OSX_AVAILABLE_BUT_DEPRECATED(a,b,c,d)"
+               , "-D__OSX_AVAILABLE_BUT_DEPRECATED_MSG(a,b,c,d,e)" ]
           else []
-        noBlocksOpts = if noBlocks then ["-U__BLOCKS__"] else []
-        args = cppOpts ++ noGnuOpts ++ noBlocksOpts ++ [newHeaderFile]
+        args = cppOpts ++ nonGNUOpts ++ ["-U__BLOCKS__"] ++ [newHeaderFile]
     tracePreproc (unwords (cpp:args))
     exitCode <- CIO.liftIO $ do
       preprocHnd <- openFile preprocFile WriteMode
@@ -627,17 +613,8 @@ process headerFiles bndFile  =
     --
     -- output the result
     --
-    dumpCHS (outDir </> outFName) hsMod True
-    dumpCHI (outDir </> outFName) chi           -- different suffix will be appended
+    dumpCHS outFPath hsMod True
+    dumpCHI outFPath chi           -- different suffix will be appended
   where
     tracePreproc cmd = putTraceStr tracePhasesSW $
                          "Invoking cpp as `" ++ cmd ++ "'...\n"
-    traceCHSDump mod' = do
-                         flag <- traceSet dumpCHSSW
-                         when flag $
-                           (do
-                              CIO.putStr ("...dumping CHS to `" ++ chsName
-                                         ++ "'...\n")
-                              dumpCHS chsName mod' False)
-
-    chsName = FilePath.takeBaseName bndFile <.> "dump"

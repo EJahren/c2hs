@@ -19,6 +19,7 @@ data RegressionTest = RegressionTest
                       , flags :: [Text]
                       , aptPPA :: [Text]
                       , aptPackages :: [Text]
+                      , cabalBuildTools :: [Text]
                       , specialSetup :: [Text]
                       , extraPath :: [Text]
                       } deriving (Eq, Show)
@@ -29,6 +30,7 @@ instance FromJSON RegressionTest where
                                         <*> v .:? "flags" .!= []
                                         <*> v .:? "apt-ppa" .!= []
                                         <*> v .:? "apt-packages" .!= []
+                                        <*> v .:? "cabal-build-tools" .!= []
                                         <*> v .:? "special-setup" .!= []
                                         <*> v .:? "extra-path" .!= []
   parseJSON _ = mzero
@@ -55,11 +57,15 @@ main = shelly $ do
   tests <- liftIO $ readTests "tests/regression-suite.yaml"
   let ppas = nub $ concatMap aptPPA tests
       pkgs = nub $ concatMap aptPackages tests
+      buildTools = nub $ concatMap cabalBuildTools tests
       specials = concatMap specialSetup tests
       extraPaths = concatMap extraPath tests
 
   when (not travis) $
     echo "ASSUMING THAT ALL NECESSARY LIBRARIES ALREADY INSTALLED!\n"
+
+  home <- fromText <$> get_env_text "HOME"
+  appendToPath $ home </> ".cabal/bin"
 
   when travis $ do
     when (not (null ppas)) $ do
@@ -94,7 +100,7 @@ main = shelly $ do
           Just efs -> infs ++ concatMap (\f -> ["-f", f]) (T.splitOn "," efs)
     echo $ "\nREGRESSION TEST: " <> n <> "\n"
     errExit False $ do
-      run_ "cabal" $ ["install"] ++ fs ++ [n]
+      run_ "cabal" $ ["install", "--jobs=1"] ++ fs ++ [n]
       lastExitCode
 
   if all (== 0) codes
